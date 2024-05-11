@@ -1,24 +1,21 @@
 {
   "canisters": {
     "backend": {
-      "main": "src/html-asset-upload-to-motoko-backend/main.mo",
+      "main": "src/backend/main.mo",
       "type": "motoko"
     },
     "frontend": {
-      "dependencies": [
-        "backend"
-      ],
+      "dependencies": ["backend"],
       "type": "assets",
       "frontend": {
         "entrypoint": "src/frontend/index.html"
       },
-      "source": [
-        "src/frontend"
-      ]
+      "source": ["src/frontends/assets", "dist/frontend/"]
     },
     "internet_identity": {
       "candid": "https://github.com/dfinity/internet-identity/releases/latest/download/internet_identity.did",
       "frontend": {},
+      "specified_id": "rdmx6-jaaaa-aaaaa-aaadq-cai",
       "remote": {
         "id": {
           "ic": "rdmx6-jaaaa-aaaaa-aaadq-cai"
@@ -35,5 +32,11 @@
     }
   },
   "output_env_file": ".env",
-  "version": 1
+  "version": 1,
+  "networks": {
+    "local": {
+      "bind": "127.0.0.1:4943",
+      "type": "ephemeral"
+    }
+  }
 }

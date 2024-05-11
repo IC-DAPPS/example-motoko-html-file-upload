@@ -7,8 +7,6 @@ import Result "mo:base/Result";
 import Debug "mo:base/Debug";
 import Text "mo:base/Text";
 import Iter "mo:base/Iter";
-import Time "mo:base/Time";
-import Hash "mo:base/Hash";
 
 import Batch "Batch";
 import U "Utils";
@@ -23,7 +21,6 @@ actor {
 
   type File = {
     modified : Nat64;
-    // name : Text;
     contentType : Text;
     content : [Blob];
     sha256 : ?Blob;
@@ -41,6 +38,14 @@ actor {
     chunk : Blob;
   };
 
+  type FileInfo = {
+    file_name : FileName;
+    modified : Nat64;
+    content_type : Text;
+    sha256 : ?Blob;
+    size : Nat;
+    nos_chunks : Nat;
+  };
   // type Batch = {
   //   uploader : Principal;
   //   chunksSha256 : [Blob];
@@ -81,6 +86,9 @@ actor {
   func trapDuplicateRegister(caller : Principal) : () {
     if (isRegistered caller) { Debug.trap("Already Registered") };
   };
+  func trapNonUploader(uploader : Principal, caller : Principal) {
+    if (uploader != caller) { Debug.trap("Unauthorized uploader") };
+  };
 
   system func preupgrade() {
     persistedUserRegisrty := Buffer.toArray(usersRegistry);
@@ -102,7 +110,7 @@ actor {
   };
 
   public shared ({ caller }) func registerUser(reg : ?Principal) : async () {
-    trapAnonymous caller;
+    // trapAnonymous caller;
     trapDuplicateRegister caller;
     switch (reg) {
       case (?p) { trapAnonymous(caller); usersRegistry.add(p) };
@@ -111,8 +119,12 @@ actor {
 
   };
 
+  public shared query ({ caller }) func isUserRegistered() : async Bool {
+    isRegistered(caller);
+  };
+
   public shared ({ caller }) func create_batch(args : BatchArg) : async BatchId {
-    trapAnonymous caller;
+    // trapAnonymous caller;
     trapUnregistered caller;
     let batchId = nextBatchId;
     let subArg = { batchId; uploader = caller };
@@ -123,6 +135,95 @@ actor {
     return batchId;
   };
 
-  public shared ({ caller }) func upload_chunk(_args : UploadChunkArg) : async () {};
+  public shared ({ caller }) func upload_chunk({ batchId; chunk } : UploadChunkArg) : async () {
+    // trapAnonymous caller;
+    // trapUnregistered caller;
+
+    let batch : Batch = switch (batches.get(batchId)) {
+      case (?value) {
+        trapNonUploader(value.uploader, caller);
+        value;
+      };
+      case (null) { Debug.trap("Batch not found") };
+    };
+    batch.addChunk<system>(chunk);
+  };
+
+  public shared query func getStoredFiles() : async [(Text, File)] {
+    Iter.toArray(filesStored.entries());
+  };
+
+  public shared query ({ caller }) func get({ file_name : FileName }) : async {
+    modified : Nat64;
+    content_type : Text;
+    content : Blob;
+    sha256 : ?Blob;
+    chunks_left : Nat;
+  } {
+    trapAnonymous caller;
+    trapUnregistered caller;
+
+    switch (filesStored.get(file_name)) {
+      case (?{ modified; contentType; content; sha256 } : ?File) {
+        {
+          modified;
+          content_type = contentType;
+          content = content[0];
+          sha256;
+          chunks_left = content.size() -1;
+        };
+      };
+      case (null) { Debug.trap("File not Found") };
+    };
+  };
+
+  func _validateFileSha256(expectedSha256 : ?Blob, actualSha256 : ?Blob) {
+    switch (expectedSha256, actualSha256) {
+      case (?expected, ?actual) {
+        if (expected != actual) Debug.trap("sha256 mismatch");
+      };
+      case (?expected, null) Debug.trap("File has no sha256");
+      case (null, _) {};
+    };
+  };
+
+  public shared query ({ caller }) func get_chunk({
+    file_name : FileName;
+    index : Nat;
+    // sha256 : ?Blob;
+  }) : async { content : Blob } {
+    trapAnonymous caller;
+    trapUnregistered caller;
+
+    switch (filesStored.get(file_name)) {
+      case (?file) {
+        // validateFileSha256(sha256, file.sha256);
+        {
+          content = file.content[index];
+        };
+      };
+      case (null) { Debug.trap("File not Found") };
+    };
+
+  };
+
+  public shared query ({ caller }) func list() : async [FileInfo] {
+    trapAnonymous caller;
+    trapUnregistered caller;
+
+    let buffer = Buffer.Buffer<FileInfo>(filesStored.size());
+
+    for ((file_name, { modified; contentType; content; sha256 }) in filesStored.entries()) {
+      let content_type = contentType;
+      let nos_chunks = content.size();
+      var size = 0;
+      for (chunk in content.vals()) {
+        size += chunk.size();
+      };
+
+      buffer.add({ file_name; modified; content_type; sha256; size; nos_chunks });
+    };
+    Buffer.toArray(buffer);
+  };
 
 };

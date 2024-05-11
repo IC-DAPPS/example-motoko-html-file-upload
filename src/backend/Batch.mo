@@ -41,6 +41,7 @@ module {
 
     public class Batch<system>(init : InitBatch, batches : HashMap.HashMap<Nat, Batch>, filesStored : HashMap.HashMap<Text, File>) {
         let numberOfChunks : Nat = init.chunksSha256.size();
+        if (numberOfChunks == 0) { Debug.trap("chunksSha256 can not be empty") };
         let chunks = Buffer.Buffer<Blob>(numberOfChunks);
 
         public let uploader : Principal = init.uploader;
